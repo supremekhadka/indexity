@@ -51,6 +51,7 @@ import {
   DrawingMode,
   EditMode,
   CreationMode,
+  isDrawingMode,
 } from '@app/annotations/modules/videos/models/mode';
 import { SvgAnnotationFormDialogComponent } from '@indexity/annotations';
 import { AnnotationShape } from '@app/annotations/models/annotation-shape.model';
@@ -610,7 +611,7 @@ export class VideoAnnotationsViewComponent
     if (
       annotation &&
       (this.mode.name === CreationMode.name ||
-        this.mode.name === DrawingMode.name)
+        isDrawingMode(this.mode))
     ) {
       this.videoPlayerStoreFacade.setCurrentTime(this.currentTimestamp);
     }

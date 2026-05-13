@@ -72,6 +72,34 @@ describe('Annotations Helper', () => {
     expect(result).toEqual(expected);
   });
 
+  it('should remove duplicated line positions', () => {
+    const positions = {
+      0: {
+        x1: 10,
+        y1: 10,
+        x2: 20,
+        y2: 20,
+      },
+      10: {
+        x1: 10,
+        y1: 10,
+        x2: 20,
+        y2: 20,
+      },
+      20: {
+        x1: 15,
+        y1: 10,
+        x2: 25,
+        y2: 20,
+      },
+    };
+
+    expect(removeDuplicatedPositions(positions)).toEqual({
+      0: positions[0],
+      20: positions[20],
+    });
+  });
+
   describe('rectifyPositions', () => {
     it('should set x to 0', () => {
       const positions = {
@@ -173,6 +201,29 @@ describe('Annotations Helper', () => {
       const res = rectifyPositions(positions);
       expect(res.changed).toBeFalsy();
       expect(res.result).toEqual(positions);
+    });
+
+    it('should clamp line endpoints inside the frame', () => {
+      const positions = {
+        0: {
+          x1: -5,
+          y1: 10,
+          x2: 120,
+          y2: 150,
+        },
+      };
+
+      expect(rectifyPositions(positions)).toEqual({
+        changed: true,
+        result: {
+          0: {
+            x1: 0,
+            y1: 10,
+            x2: 100,
+            y2: 100,
+          },
+        },
+      });
     });
   });
 
@@ -295,6 +346,33 @@ describe('Annotations Helper', () => {
       const result = addInterpolatedPositions(fakeAnnotationEntity, fakeStep);
       expect(result.shape.positions['10']).toEqual(expectedPositions['10']);
       expect(result.shape.positions['20']).toEqual(expectedPositions['20']);
+    });
+
+    it('should interpolate line positions', () => {
+      const fakeAnnotationEntity = new AnnotationEntity();
+      fakeAnnotationEntity.duration = 30;
+      fakeAnnotationEntity.shape = {
+        type: 'line',
+        positions: {
+          '0': { x1: 0, y1: 0, x2: 10, y2: 10 },
+          '30': { x1: 30, y1: 15, x2: 40, y2: 25 },
+        },
+      };
+
+      const result = addInterpolatedPositions(fakeAnnotationEntity, 10);
+
+      expect(result.shape.positions['10']).toEqual({
+        x1: 10,
+        y1: 5,
+        x2: 20,
+        y2: 15,
+      });
+      expect(result.shape.positions['20']).toEqual({
+        x1: 20,
+        y1: 10,
+        x2: 30,
+        y2: 20,
+      });
     });
   });
 

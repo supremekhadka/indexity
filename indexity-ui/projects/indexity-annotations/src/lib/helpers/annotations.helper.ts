@@ -48,9 +48,11 @@ export const cutShape = (
 
   // result
   const shape1 = {
+    type: shape.type,
     positions: positions1,
   };
   const shape2 = {
+    type: shape.type,
     positions: positions2,
   };
   return [shape1, shape2];

@@ -2,7 +2,7 @@ import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 import { MaterialCustomModule } from '../../modules/material-custom.module';
 import { HighlighterSvgComponent } from './highlighter-svg.component';
 import { annotations } from '../../mocks/mock-annotations-service';
-import { DrawingMode, Mode, NormalMode } from '../../models/mode';
+import { DrawingMode, LineDrawingMode, Mode, NormalMode } from '../../models/mode';
 import { Component } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { Annotation } from '../../models/annotation.model';
@@ -180,7 +180,10 @@ describe('HighlighterSvgComponent', () => {
       spyOn(directive.setTmp, 'emit');
       directive.createAnnotation(shape, label);
       expect(directive.setTmp.emit).toHaveBeenCalledWith(
-        jasmine.objectContaining(expected),
+        jasmine.objectContaining({
+          ...expected,
+          shape: jasmine.objectContaining(shape as any),
+        }),
       );
     });
 
@@ -192,7 +195,36 @@ describe('HighlighterSvgComponent', () => {
       expect(directive.setTmp.emit).toHaveBeenCalledWith(
         jasmine.objectContaining({
           ...expected,
+          shape: jasmine.objectContaining(shape as any),
           label,
+        }),
+      );
+    });
+
+    it('should preserve line shape types', () => {
+      const lineShape = {
+        type: 'line',
+        positions: {
+          10: {
+            x1: 10,
+            y1: 15,
+            x2: 30,
+            y2: 35,
+          },
+        },
+      };
+      component.mode = LineDrawingMode;
+      component.videoTime = 10;
+      fixture.detectChanges();
+      spyOn(directive.setTmp, 'emit');
+
+      directive.createAnnotation(lineShape as any, label);
+
+      expect(directive.setTmp.emit).toHaveBeenCalledWith(
+        jasmine.objectContaining({
+          shape: jasmine.objectContaining({
+            type: 'line',
+          }),
         }),
       );
     });
@@ -254,6 +286,20 @@ describe('HighlighterSvgComponent', () => {
       expect(directive.getCursor(null, null)).toBe(NormalMode.cursor);
       expect(directive.getCursor(null, 3)).toBe(NormalMode.cursor);
       expect(directive.getCursor(40, 40)).toBe(NormalMode.cursor);
+    });
+
+    it('should return a line handle cursor for line shapes', () => {
+      directive.drawnShape = {
+        ...directive.drawnShape,
+        type: 'line',
+        x1: 50,
+        y1: 50,
+        x2: 80,
+        y2: 80,
+      };
+
+      expect(directive.getCursor(50, 50)).toBe('line-start');
+      expect(directive.getCursor(80, 80)).toBe('line-end');
     });
 
     it('should return the n-resize cursor', () => {

@@ -5,6 +5,7 @@ import { Component } from '@angular/core';
 import {
   DrawingMode,
   EditMode,
+  LineDrawingMode,
   Mode,
   NormalMode,
   CreationMode,
@@ -151,6 +152,13 @@ describe('SvgAnnotationToolbarComponent', () => {
       expect(directive.toggle.value).toBeFalsy();
       directive.activateDrawingMode();
       expect(directive.toggle.value).toBe(DrawingMode.name);
+    });
+
+    it('should activate line drawing mode', () => {
+      spyOn(directive.setMode, 'emit');
+      directive.activateDrawingMode(LineDrawingMode);
+      expect(directive.setMode.emit).toHaveBeenCalledWith(LineDrawingMode);
+      expect(directive.toggle.value).toBe(LineDrawingMode.name);
     });
   });
 

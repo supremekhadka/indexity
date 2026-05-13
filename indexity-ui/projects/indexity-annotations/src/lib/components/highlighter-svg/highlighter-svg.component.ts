@@ -9,13 +9,29 @@ import {
   SimpleChanges,
 } from '@angular/core';
 import { cloneDeep, clamp } from 'lodash';
-import { DrawingMode, EditMode, Mode, NormalMode } from '../../models/mode';
+import {
+  DrawingMode,
+  EditMode,
+  isDrawingMode,
+  LineDrawingMode,
+  Mode,
+  NormalMode,
+} from '../../models/mode';
 import * as annotationsHelper from '../../helpers/annotations.helper';
 import { SvgAnnotationFormDialogComponent } from '../svg-annotation-form-dialog/svg-annotation-form-dialog.component';
 import { MatDialog } from '@angular/material/dialog';
 import { AnnotationLabel } from '../../models/annotation-label.model';
 import { Annotation } from '../../models/annotation.model';
-import { AnnotationShape } from '../../models/annotation-shape.model';
+import {
+  AnnotationPosition,
+  AnnotationShape,
+  AnnotationShapeType,
+  getAnnotationShapeType,
+  isLineAnnotationPosition,
+  isLineAnnotationShape,
+  LINE_ANNOTATION_SHAPE,
+  RECTANGLE_ANNOTATION_SHAPE,
+} from '../../models/annotation-shape.model';
 import { BehaviorSubject } from 'rxjs';
 import { AnnotationLabelGroup } from '@app/annotations/models/annotation-label-group.model';
 
@@ -75,6 +91,7 @@ export class HighlighterSvgComponent implements OnChanges {
 
   firstMousePositionX: number;
   firstMousePositionY: number;
+  initialDrawnShape = null;
 
   // flags to signal in which state we are
   rectangleMoving = false;
@@ -85,18 +102,28 @@ export class HighlighterSvgComponent implements OnChanges {
   cursor = 'default';
 
   initShape = {
+    type: RECTANGLE_ANNOTATION_SHAPE as AnnotationShapeType,
     width: 0,
     height: 0,
     posX: 0,
     posY: 0,
+    x1: 0,
+    y1: 0,
+    x2: 0,
+    y2: 0,
     color: '#b31111',
     name: '',
   };
   drawnShape: {
+    type: AnnotationShapeType;
     width: number;
     height: number;
     posX: number;
     posY: number;
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
     color: string;
     name: string;
   } = {
@@ -117,6 +144,44 @@ export class HighlighterSvgComponent implements OnChanges {
    */
   constructor(public dialog: MatDialog) {}
 
+  get drawingShapeType(): AnnotationShapeType {
+    if (isDrawingMode(this.currentMode) && this.currentMode.shapeType) {
+      return this.currentMode.shapeType;
+    }
+
+    if (this.tmpSvgAnnotation?.shape) {
+      return getAnnotationShapeType(this.tmpSvgAnnotation.shape);
+    }
+
+    return getAnnotationShapeType(this.shape);
+  }
+
+  isLineShape(shape?: AnnotationShape): boolean {
+    return isLineAnnotationShape(shape);
+  }
+
+  isLineDrawing(): boolean {
+    return this.drawnShape.type === LINE_ANNOTATION_SHAPE;
+  }
+
+  isLineAnnotation(annotation: Annotation): boolean {
+    return isLineAnnotationShape(annotation?.shape);
+  }
+
+  getLabelX(annotation: Annotation): number {
+    const position = this.getPositionAtCurrentTime(annotation.shape);
+    return isLineAnnotationPosition(position)
+      ? Math.min(position.x1, position.x2) + 10
+      : position.x + 10;
+  }
+
+  getLabelY(annotation: Annotation): number {
+    const position = this.getPositionAtCurrentTime(annotation.shape);
+    return isLineAnnotationPosition(position)
+      ? Math.min(position.y1, position.y2) + 20
+      : position.y + 20;
+  }
+
   ngOnChanges(changes: SimpleChanges): void {
     if (
       (changes.currentTime || changes.tmpSvgAnnotation) &&
@@ -135,7 +200,7 @@ export class HighlighterSvgComponent implements OnChanges {
       }
     } else if (
       changes.tmpSvgAnnotation &&
-      this.currentMode === DrawingMode &&
+      isDrawingMode(this.currentMode) &&
       this.tmpSvgAnnotation
     ) {
       this.setDrawnShapePositionAtCurrentTime();
@@ -146,6 +211,7 @@ export class HighlighterSvgComponent implements OnChanges {
       this.setTmp.emit(this.annotationToUpdate);
       this.drawnShape = {
         ...this.drawnShape,
+        type: getAnnotationShapeType(this.annotationToUpdate.shape),
         ...this.annotationToUpdate.label,
       };
     }
@@ -156,6 +222,7 @@ export class HighlighterSvgComponent implements OnChanges {
     ) {
       this.cursor = this.currentMode.cursor;
       if (changes.currentMode.previousValue !== NormalMode) {
+        this.initialDrawnShape = null;
         this.drawnShape = {
           ...this.initShape,
         };
@@ -167,7 +234,7 @@ export class HighlighterSvgComponent implements OnChanges {
       changes.svgOverlay &&
       changes.svgOverlay.previousValue !== changes.svgOverlay.currentValue
     ) {
-      this.resizeRectangle();
+      this.resizeShape();
     }
     if (changes.displayedShapes && this.displayedShapes) {
       this.structureDisplayedShapes = this.displayedShapes.filter(
@@ -180,13 +247,14 @@ export class HighlighterSvgComponent implements OnChanges {
     }
     if (changes.shape && (!this.shape || !this.shape.positions)) {
       this.shape = {
+        type: this.drawingShapeType,
         positions: {},
       };
     }
   }
 
   isDrawnShapeVisible(): boolean {
-    if (this.currentMode === DrawingMode) {
+    if (isDrawingMode(this.currentMode)) {
       return true;
     } else if (this.currentMode === EditMode && this.tmpSvgAnnotation) {
       return annotationsHelper.isAt(this.currentTime)(this.tmpSvgAnnotation);
@@ -217,12 +285,50 @@ export class HighlighterSvgComponent implements OnChanges {
     const currentPosition = this.getPositionAtCurrentTime(
       annotationWithCurrentChanges.shape,
     );
+    const isLine = isLineAnnotationPosition(currentPosition);
     this.drawnShape = {
       ...this.drawnShape,
-      height: currentPosition.height,
-      width: currentPosition.width,
-      posX: currentPosition.x,
-      posY: currentPosition.y,
+      type: getAnnotationShapeType(annotationWithCurrentChanges.shape),
+      height: isLine
+        ? Math.abs(currentPosition.y2 - currentPosition.y1)
+        : currentPosition.height,
+      width: isLine
+        ? Math.abs(currentPosition.x2 - currentPosition.x1)
+        : currentPosition.width,
+      posX: isLine
+        ? Math.min(currentPosition.x1, currentPosition.x2)
+        : currentPosition.x,
+      posY: isLine
+        ? Math.min(currentPosition.y1, currentPosition.y2)
+        : currentPosition.y,
+      x1: isLine ? currentPosition.x1 : currentPosition.x,
+      y1: isLine ? currentPosition.y1 : currentPosition.y,
+      x2: isLine
+        ? currentPosition.x2
+        : currentPosition.x + currentPosition.width,
+      y2: isLine
+        ? currentPosition.y2
+        : currentPosition.y + currentPosition.height,
+    };
+  }
+
+  toLineDrawnShape(
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+  ): typeof this.drawnShape {
+    return {
+      ...this.drawnShape,
+      type: LINE_ANNOTATION_SHAPE,
+      x1,
+      y1,
+      x2,
+      y2,
+      posX: Math.min(x1, x2),
+      posY: Math.min(y1, y2),
+      width: Math.abs(x2 - x1),
+      height: Math.abs(y2 - y1),
     };
   }
 
@@ -244,22 +350,31 @@ export class HighlighterSvgComponent implements OnChanges {
       ? event.touches[0].clientY - this.svgOverlay.top
       : event.clientY - this.svgOverlay.top;
     if (!this.rectangleDrawing && this.tmpSvgAnnotation) {
-      // Move the rectangle
       this.rectangleMoving = true;
-      // Register where the position of the mouse was on the rectangle
-      this.firstMousePositionX = x - this.drawnShape.posX;
-      this.firstMousePositionY = y - this.drawnShape.posY;
+      this.initialDrawnShape = cloneDeep(this.drawnShape);
+      if (this.isLineDrawing()) {
+        this.firstMousePositionX = x;
+        this.firstMousePositionY = y;
+      } else {
+        this.firstMousePositionX = x - this.drawnShape.posX;
+        this.firstMousePositionY = y - this.drawnShape.posY;
+      }
     } else if (
-      this.currentMode === DrawingMode &&
+      isDrawingMode(this.currentMode) &&
       (event.button === 0 || event.touches)
     ) {
-      // Draw a 'new' rectangle
       this.rectangleDrawing = true;
-      // Set x and y starting positions for the rectangle
       this.drawnShape = {
         ...this.drawnShape,
+        type: this.drawingShapeType,
         posX: x,
         posY: y,
+        x1: x,
+        y1: y,
+        x2: x,
+        y2: y,
+        width: 0,
+        height: 0,
       };
       this.firstMousePositionX = x;
       this.firstMousePositionY = y;
@@ -283,33 +398,46 @@ export class HighlighterSvgComponent implements OnChanges {
     let posX = 0;
     let posY = 0;
     if (this.rectangleDrawing) {
-      // Draw a 'new' rectangle
-      if (this.firstMousePositionX <= x && this.firstMousePositionY <= y) {
-        posY = this.firstMousePositionY;
-        posX = this.firstMousePositionX;
-      } else if (
-        this.firstMousePositionX <= x &&
-        this.firstMousePositionY > y
-      ) {
-        posY = y;
-        posX = this.firstMousePositionX;
-      } else if (
-        this.firstMousePositionX > x &&
-        this.firstMousePositionY <= y
-      ) {
-        posX = x;
-        posY = this.firstMousePositionY;
+      if (this.drawingShapeType === LINE_ANNOTATION_SHAPE) {
+        this.drawnShape = this.toLineDrawnShape(
+          this.firstMousePositionX,
+          this.firstMousePositionY,
+          x,
+          y,
+        );
       } else {
-        posY = y;
-        posX = x;
+        if (this.firstMousePositionX <= x && this.firstMousePositionY <= y) {
+          posY = this.firstMousePositionY;
+          posX = this.firstMousePositionX;
+        } else if (
+          this.firstMousePositionX <= x &&
+          this.firstMousePositionY > y
+        ) {
+          posY = y;
+          posX = this.firstMousePositionX;
+        } else if (
+          this.firstMousePositionX > x &&
+          this.firstMousePositionY <= y
+        ) {
+          posX = x;
+          posY = this.firstMousePositionY;
+        } else {
+          posY = y;
+          posX = x;
+        }
+        this.drawnShape = {
+          ...this.drawnShape,
+          type: RECTANGLE_ANNOTATION_SHAPE,
+          posX,
+          posY,
+          width: Math.abs(this.firstMousePositionX - x),
+          height: Math.abs(this.firstMousePositionY - y),
+          x1: posX,
+          y1: posY,
+          x2: posX + Math.abs(this.firstMousePositionX - x),
+          y2: posY + Math.abs(this.firstMousePositionY - y),
+        };
       }
-      this.drawnShape = {
-        ...this.drawnShape,
-        posX,
-        posY,
-        width: Math.abs(this.firstMousePositionX - x),
-        height: Math.abs(this.firstMousePositionY - y),
-      };
     } else if (this.rectangleMoving) {
       this.updateDrawnShape(x, y, event.touches);
 
@@ -325,7 +453,7 @@ export class HighlighterSvgComponent implements OnChanges {
   onKeyDown(event): void {
     if (
       event.ctrlKey &&
-      (this.currentMode === DrawingMode || this.currentMode === EditMode) &&
+      (isDrawingMode(this.currentMode) || this.currentMode === EditMode) &&
       this.tmpSvgAnnotation
     ) {
       this.cursor = 'move';
@@ -351,7 +479,9 @@ export class HighlighterSvgComponent implements OnChanges {
     }
     // ALT + J
     if (event.altKey && event.code === 'KeyJ' && this.lastAnnotation) {
-      this.setMode.emit(DrawingMode);
+      this.setMode.emit(
+        this.isLineShape(this.lastAnnotation.shape) ? LineDrawingMode : DrawingMode,
+      );
       const lastPositionTimestamp = Object.keys(
         this.lastAnnotation.shape.positions,
       )
@@ -380,7 +510,7 @@ export class HighlighterSvgComponent implements OnChanges {
   @HostListener('document:keyup', ['$event'])
   onKeyUp(event): void {
     if (
-      (this.currentMode === DrawingMode || this.currentMode === EditMode) &&
+      (isDrawingMode(this.currentMode) || this.currentMode === EditMode) &&
       this.tmpSvgAnnotation
     ) {
       if (event.ctrlKey && event.key.startsWith('Arrow')) {
@@ -395,49 +525,75 @@ export class HighlighterSvgComponent implements OnChanges {
       ...this.shape.positions,
     };
     const currentPos = this.getPositionAtCurrentTime(this.shape);
-    if (
-      currentPos.x !== this.drawnShape.posX ||
-      currentPos.y !== this.drawnShape.posY ||
-      currentPos.width !== this.drawnShape.width ||
-      currentPos.height !== this.drawnShape.height
-    ) {
-      positions[this.currentTime] = {
-        x: annotationsHelper.getWidthInRatio(
-          this.drawnShape.posX,
-          this.svgOverlay.width,
-        ),
-        y: annotationsHelper.getHeightInRatio(
-          this.drawnShape.posY,
-          this.svgOverlay.height,
-        ),
-        width: annotationsHelper.getWidthInRatio(
-          this.drawnShape.width,
-          this.svgOverlay.width,
-        ),
-        height: annotationsHelper.getHeightInRatio(
-          this.drawnShape.height,
-          this.svgOverlay.height,
-        ),
-      };
-      const rectangle = {
+    const currentPositionChanged = isLineAnnotationPosition(currentPos)
+      ? currentPos.x1 !== this.drawnShape.x1 ||
+        currentPos.y1 !== this.drawnShape.y1 ||
+        currentPos.x2 !== this.drawnShape.x2 ||
+        currentPos.y2 !== this.drawnShape.y2
+      : currentPos.x !== this.drawnShape.posX ||
+        currentPos.y !== this.drawnShape.posY ||
+        currentPos.width !== this.drawnShape.width ||
+        currentPos.height !== this.drawnShape.height;
+    if (currentPositionChanged) {
+      positions[this.currentTime] = this.isLineDrawing()
+        ? {
+            x1: annotationsHelper.getWidthInRatio(
+              this.drawnShape.x1,
+              this.svgOverlay.width,
+            ),
+            y1: annotationsHelper.getHeightInRatio(
+              this.drawnShape.y1,
+              this.svgOverlay.height,
+            ),
+            x2: annotationsHelper.getWidthInRatio(
+              this.drawnShape.x2,
+              this.svgOverlay.width,
+            ),
+            y2: annotationsHelper.getHeightInRatio(
+              this.drawnShape.y2,
+              this.svgOverlay.height,
+            ),
+          }
+        : {
+            x: annotationsHelper.getWidthInRatio(
+              this.drawnShape.posX,
+              this.svgOverlay.width,
+            ),
+            y: annotationsHelper.getHeightInRatio(
+              this.drawnShape.posY,
+              this.svgOverlay.height,
+            ),
+            width: annotationsHelper.getWidthInRatio(
+              this.drawnShape.width,
+              this.svgOverlay.width,
+            ),
+            height: annotationsHelper.getHeightInRatio(
+              this.drawnShape.height,
+              this.svgOverlay.height,
+            ),
+          };
+      const shape = {
         ...this.shape,
+        type: this.isLineDrawing()
+          ? LINE_ANNOTATION_SHAPE
+          : RECTANGLE_ANNOTATION_SHAPE,
         positions,
       };
-      this.setShape.emit(rectangle);
+      this.setShape.emit(shape);
       if (this.tmpSvgAnnotation) {
         if (this.tmpSvgAnnotation.isOneShot) {
-          rectangle.positions = {};
-          rectangle.positions[this.tmpSvgAnnotation.timestamp] =
+          shape.positions = {};
+          shape.positions[this.tmpSvgAnnotation.timestamp] =
             positions[this.currentTime];
-          this.setShape.emit(rectangle);
+          this.setShape.emit(shape);
         }
         const annotation = {
           ...this.tmpSvgAnnotation,
           shape: {
-            ...rectangle,
+            ...shape,
           },
         };
-        if (this.currentMode === DrawingMode) {
+        if (isDrawingMode(this.currentMode)) {
           this.lastAnnotation = annotation;
         }
       }
@@ -445,34 +601,109 @@ export class HighlighterSvgComponent implements OnChanges {
   }
 
   moveLeft(): void {
-    this.drawnShape = {
-      ...this.drawnShape,
-      posX: this.drawnShape.posX - 1,
-    };
+    this.drawnShape = this.isLineDrawing()
+      ? this.toLineDrawnShape(
+          this.drawnShape.x1 - 1,
+          this.drawnShape.y1,
+          this.drawnShape.x2 - 1,
+          this.drawnShape.y2,
+        )
+      : {
+          ...this.drawnShape,
+          posX: this.drawnShape.posX - 1,
+          x1: this.drawnShape.x1 - 1,
+          x2: this.drawnShape.x2 - 1,
+        };
   }
 
   moveRight(): void {
-    this.drawnShape = {
-      ...this.drawnShape,
-      posX: this.drawnShape.posX + 1,
-    };
+    this.drawnShape = this.isLineDrawing()
+      ? this.toLineDrawnShape(
+          this.drawnShape.x1 + 1,
+          this.drawnShape.y1,
+          this.drawnShape.x2 + 1,
+          this.drawnShape.y2,
+        )
+      : {
+          ...this.drawnShape,
+          posX: this.drawnShape.posX + 1,
+          x1: this.drawnShape.x1 + 1,
+          x2: this.drawnShape.x2 + 1,
+        };
   }
 
   moveUp(): void {
-    this.drawnShape = {
-      ...this.drawnShape,
-      posY: this.drawnShape.posY - 1,
-    };
+    this.drawnShape = this.isLineDrawing()
+      ? this.toLineDrawnShape(
+          this.drawnShape.x1,
+          this.drawnShape.y1 - 1,
+          this.drawnShape.x2,
+          this.drawnShape.y2 - 1,
+        )
+      : {
+          ...this.drawnShape,
+          posY: this.drawnShape.posY - 1,
+          y1: this.drawnShape.y1 - 1,
+          y2: this.drawnShape.y2 - 1,
+        };
   }
 
   moveDown(): void {
-    this.drawnShape = {
-      ...this.drawnShape,
-      posY: this.drawnShape.posY + 1,
-    };
+    this.drawnShape = this.isLineDrawing()
+      ? this.toLineDrawnShape(
+          this.drawnShape.x1,
+          this.drawnShape.y1 + 1,
+          this.drawnShape.x2,
+          this.drawnShape.y2 + 1,
+        )
+      : {
+          ...this.drawnShape,
+          posY: this.drawnShape.posY + 1,
+          y1: this.drawnShape.y1 + 1,
+          y2: this.drawnShape.y2 + 1,
+        };
   }
 
   updateDrawnShape(offsetX: number, offsetY: number, touchEvent = false): void {
+    if (this.isLineDrawing()) {
+      const initialShape = this.initialDrawnShape || this.drawnShape;
+      if (this.cursor === 'move' || touchEvent) {
+        const deltaX = offsetX - this.firstMousePositionX;
+        const deltaY = offsetY - this.firstMousePositionY;
+        const clampedDeltaX = clamp(
+          deltaX,
+          -Math.min(initialShape.x1, initialShape.x2),
+          this.svgOverlay.width - Math.max(initialShape.x1, initialShape.x2),
+        );
+        const clampedDeltaY = clamp(
+          deltaY,
+          -Math.min(initialShape.y1, initialShape.y2),
+          this.svgOverlay.height - Math.max(initialShape.y1, initialShape.y2),
+        );
+        this.drawnShape = this.toLineDrawnShape(
+          initialShape.x1 + clampedDeltaX,
+          initialShape.y1 + clampedDeltaY,
+          initialShape.x2 + clampedDeltaX,
+          initialShape.y2 + clampedDeltaY,
+        );
+      } else if (this.cursor === 'line-start') {
+        this.drawnShape = this.toLineDrawnShape(
+          clamp(offsetX, 0, this.svgOverlay.width),
+          clamp(offsetY, 0, this.svgOverlay.height),
+          initialShape.x2,
+          initialShape.y2,
+        );
+      } else if (this.cursor === 'line-end') {
+        this.drawnShape = this.toLineDrawnShape(
+          initialShape.x1,
+          initialShape.y1,
+          clamp(offsetX, 0, this.svgOverlay.width),
+          clamp(offsetY, 0, this.svgOverlay.height),
+        );
+      }
+      return;
+    }
+
     const minWidthAndHeight = 20;
     const x = offsetX - this.firstMousePositionX;
     const y = offsetY - this.firstMousePositionY;
@@ -616,6 +847,14 @@ export class HighlighterSvgComponent implements OnChanges {
         };
       }
     }
+    this.drawnShape = {
+      ...this.drawnShape,
+      type: RECTANGLE_ANNOTATION_SHAPE,
+      x1: this.drawnShape.posX,
+      y1: this.drawnShape.posY,
+      x2: this.drawnShape.posX + this.drawnShape.width,
+      y2: this.drawnShape.posY + this.drawnShape.height,
+    };
   }
 
   @HostListener('mouseup')
@@ -626,28 +865,47 @@ export class HighlighterSvgComponent implements OnChanges {
     const positions = {
       ...this.shape.positions,
     };
-    positions[this.currentTime] = {
-      x: annotationsHelper.getWidthInRatio(
-        this.drawnShape.posX,
-        this.svgOverlay.width,
-      ),
-      y: annotationsHelper.getHeightInRatio(
-        this.drawnShape.posY,
-        this.svgOverlay.height,
-      ),
-      width: annotationsHelper.getWidthInRatio(
-        this.drawnShape.width,
-        this.svgOverlay.width,
-      ),
-      height: annotationsHelper.getHeightInRatio(
-        this.drawnShape.height,
-        this.svgOverlay.height,
-      ),
-    };
-    if (this.currentMode === DrawingMode && this.rectangleDrawing) {
-      // register the last position of the rectangle on drawing mode
-      const rectangle = {
+    positions[this.currentTime] = this.isLineDrawing()
+      ? {
+          x1: annotationsHelper.getWidthInRatio(
+            this.drawnShape.x1,
+            this.svgOverlay.width,
+          ),
+          y1: annotationsHelper.getHeightInRatio(
+            this.drawnShape.y1,
+            this.svgOverlay.height,
+          ),
+          x2: annotationsHelper.getWidthInRatio(
+            this.drawnShape.x2,
+            this.svgOverlay.width,
+          ),
+          y2: annotationsHelper.getHeightInRatio(
+            this.drawnShape.y2,
+            this.svgOverlay.height,
+          ),
+        }
+      : {
+          x: annotationsHelper.getWidthInRatio(
+            this.drawnShape.posX,
+            this.svgOverlay.width,
+          ),
+          y: annotationsHelper.getHeightInRatio(
+            this.drawnShape.posY,
+            this.svgOverlay.height,
+          ),
+          width: annotationsHelper.getWidthInRatio(
+            this.drawnShape.width,
+            this.svgOverlay.width,
+          ),
+          height: annotationsHelper.getHeightInRatio(
+            this.drawnShape.height,
+            this.svgOverlay.height,
+          ),
+        };
+    if (isDrawingMode(this.currentMode) && this.rectangleDrawing) {
+      const shape = {
         ...this.shape,
+        type: this.drawingShapeType,
         positions,
       };
 
@@ -679,7 +937,7 @@ export class HighlighterSvgComponent implements OnChanges {
           queryChangesSub.unsubscribe();
 
           if (data && data.name) {
-            this.createAnnotation(rectangle, data);
+            this.createAnnotation(shape, data);
           } else {
             this.drawnShape = {
               ...this.initShape,
@@ -688,7 +946,7 @@ export class HighlighterSvgComponent implements OnChanges {
           }
         });
       } else {
-        this.createAnnotation(rectangle, {
+        this.createAnnotation(shape, {
           name: '',
           color: '#b31111',
           type: 'structure',
@@ -698,6 +956,7 @@ export class HighlighterSvgComponent implements OnChanges {
 
     this.rectangleDrawing = false;
     this.svgLeave = false;
+    this.initialDrawnShape = null;
     return false; // Call preventDefault() on the event
   }
 
@@ -769,6 +1028,7 @@ export class HighlighterSvgComponent implements OnChanges {
       this.setTmp.emit(initialAnnotation);
       this.drawnShape = {
         ...this.drawnShape,
+        type: getAnnotationShapeType(initialAnnotation.shape),
         ...initialAnnotation.label,
       };
     }
@@ -799,8 +1059,35 @@ export class HighlighterSvgComponent implements OnChanges {
 
   getCursor(x: number, y: number): string {
     const margin = 5;
-    if (!x || !y || this.isInitialShape()) {
+    if (x == null || y == null || this.isInitialShape()) {
       return this.currentMode.cursor;
+    } else if (this.isLineDrawing()) {
+      const startDistance = Math.hypot(x - this.drawnShape.x1, y - this.drawnShape.y1);
+      const endDistance = Math.hypot(x - this.drawnShape.x2, y - this.drawnShape.y2);
+      if (startDistance <= margin * 2) {
+        return 'line-start';
+      }
+      if (endDistance <= margin * 2) {
+        return 'line-end';
+      }
+
+      const dx = this.drawnShape.x2 - this.drawnShape.x1;
+      const dy = this.drawnShape.y2 - this.drawnShape.y1;
+      const lengthSquared = dx * dx + dy * dy;
+      if (!lengthSquared) {
+        return this.currentMode.cursor;
+      }
+      const projection = clamp(
+        ((x - this.drawnShape.x1) * dx + (y - this.drawnShape.y1) * dy) /
+          lengthSquared,
+        0,
+        1,
+      );
+      const projectedX = this.drawnShape.x1 + projection * dx;
+      const projectedY = this.drawnShape.y1 + projection * dy;
+      return Math.hypot(x - projectedX, y - projectedY) <= margin * 2
+        ? 'move'
+        : this.currentMode.cursor;
     } else if (
       x >= this.drawnShape.posX - margin &&
       x <= this.drawnShape.posX + this.drawnShape.width + margin &&
@@ -870,11 +1157,15 @@ export class HighlighterSvgComponent implements OnChanges {
   }
 
   createAnnotation(shape: AnnotationShape, label: AnnotationLabel): void {
-    this.setShape.emit(shape);
+    const nextShape = {
+      ...shape,
+      type: shape.type || this.drawingShapeType,
+    };
+    this.setShape.emit(nextShape);
 
     const duration = 0;
     const newAnnotation: Annotation = {
-      shape,
+      shape: nextShape,
       videoId: this.videoId,
       category: 'svg',
       label,
@@ -898,15 +1189,34 @@ export class HighlighterSvgComponent implements OnChanges {
   }
 
   /**
-   * Resize the rectangle present when the scene changes
+   * Resize the visible shape when the scene changes
    */
-  resizeRectangle(): void {
+  resizeShape(): void {
+    const currentPosition = this.getPositionAtCurrentTime(this.shape);
+    const isLine = isLineAnnotationPosition(currentPosition);
     this.drawnShape = {
       ...this.drawnShape,
-      height: this.getPositionAtCurrentTime(this.shape).height,
-      width: this.getPositionAtCurrentTime(this.shape).width,
-      posX: this.getPositionAtCurrentTime(this.shape).x,
-      posY: this.getPositionAtCurrentTime(this.shape).y,
+      type: getAnnotationShapeType(this.shape),
+      height: isLine
+        ? Math.abs(currentPosition.y2 - currentPosition.y1)
+        : currentPosition.height,
+      width: isLine
+        ? Math.abs(currentPosition.x2 - currentPosition.x1)
+        : currentPosition.width,
+      posX: isLine
+        ? Math.min(currentPosition.x1, currentPosition.x2)
+        : currentPosition.x,
+      posY: isLine
+        ? Math.min(currentPosition.y1, currentPosition.y2)
+        : currentPosition.y,
+      x1: isLine ? currentPosition.x1 : currentPosition.x,
+      y1: isLine ? currentPosition.y1 : currentPosition.y,
+      x2: isLine
+        ? currentPosition.x2
+        : currentPosition.x + currentPosition.width,
+      y2: isLine
+        ? currentPosition.y2
+        : currentPosition.y + currentPosition.height,
     };
   }
 
@@ -916,8 +1226,8 @@ export class HighlighterSvgComponent implements OnChanges {
    */
   getPositionAtCurrentTime(
     rectangle,
-  ): { x: number; y: number; width: number; height: number } {
-    let res = {
+  ): AnnotationPosition {
+    let res: AnnotationPosition = {
       x: 0,
       y: 0,
       width: 0,
@@ -930,24 +1240,44 @@ export class HighlighterSvgComponent implements OnChanges {
           return +timestamp <= this.currentTime;
         });
       if (lastTimeStamp) {
-        res = {
-          x: annotationsHelper.getWidthInPixels(
-            rectangle.positions[lastTimeStamp].x,
-            this.svgOverlay.width,
-          ),
-          y: annotationsHelper.getHeightInPixels(
-            rectangle.positions[lastTimeStamp].y,
-            this.svgOverlay.height,
-          ),
-          width: annotationsHelper.getWidthInPixels(
-            rectangle.positions[lastTimeStamp].width,
-            this.svgOverlay.width,
-          ),
-          height: annotationsHelper.getHeightInPixels(
-            rectangle.positions[lastTimeStamp].height,
-            this.svgOverlay.height,
-          ),
-        };
+        const position = rectangle.positions[lastTimeStamp];
+        res = isLineAnnotationPosition(position)
+          ? {
+              x1: annotationsHelper.getWidthInPixels(
+                position.x1,
+                this.svgOverlay.width,
+              ),
+              y1: annotationsHelper.getHeightInPixels(
+                position.y1,
+                this.svgOverlay.height,
+              ),
+              x2: annotationsHelper.getWidthInPixels(
+                position.x2,
+                this.svgOverlay.width,
+              ),
+              y2: annotationsHelper.getHeightInPixels(
+                position.y2,
+                this.svgOverlay.height,
+              ),
+            }
+          : {
+              x: annotationsHelper.getWidthInPixels(
+                position.x,
+                this.svgOverlay.width,
+              ),
+              y: annotationsHelper.getHeightInPixels(
+                position.y,
+                this.svgOverlay.height,
+              ),
+              width: annotationsHelper.getWidthInPixels(
+                position.width,
+                this.svgOverlay.width,
+              ),
+              height: annotationsHelper.getHeightInPixels(
+                position.height,
+                this.svgOverlay.height,
+              ),
+            };
       }
     }
     return res;

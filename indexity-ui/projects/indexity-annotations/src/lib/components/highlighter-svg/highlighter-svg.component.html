@@ -1,7 +1,7 @@
 <svg
   attr.width="{{svgOverlay.width}}"
   attr.height="{{svgOverlay.height}}"
-  *ngIf="currentMode.name === 'draw' || displayedShapes.length > 0"
+  *ngIf="isDrawnShapeVisible() || displayedShapes.length > 0"
   [ngStyle]="{'cursor': cursor, 'left': svgOverlay.left + 'px', 'top': svgOverlay.top + 'px' }"
   >
 
@@ -20,6 +20,7 @@
     <!-- Drawn Shape -->
   <g *ngIf="isDrawnShapeVisible()">
     <rect
+      *ngIf="!isLineDrawing()"
       data-cy="drawn-shape"
       id="highlighter"
       [attr.x]="drawnShape.posX"
@@ -29,6 +30,18 @@
       [attr.stroke]="drawnShape.color"
       [attr.width]="drawnShape.width"
       [attr.height]="drawnShape.height"/>
+    <line
+      *ngIf="isLineDrawing()"
+      data-cy="drawn-line"
+      id="highlighter-line"
+      [attr.x1]="drawnShape.x1"
+      [attr.y1]="drawnShape.y1"
+      [attr.x2]="drawnShape.x2"
+      [attr.y2]="drawnShape.y2"
+      [attr.stroke]="drawnShape.color"
+      stroke-width="3"
+      stroke-linecap="round"
+      fill-opacity="0"/>
     <text
       data-cy="drawn-text"
       *ngIf="drawnShape.name.length > 0 && showLabels"
@@ -48,8 +61,9 @@
         || tmpSvgAnnotation?.id === annotation.id
         || (currentMode.name === 'edit' && annotation.readonly)
         ? 'none' : 'block'
-    }">
+     }">
       <rect
+        *ngIf="!isLineAnnotation(annotation)"
         [attr.x]="getPositionAtCurrentTime(annotation.shape).x"
         [attr.y]="getPositionAtCurrentTime(annotation.shape).y"
         [attr.width]="getPositionAtCurrentTime(annotation.shape).width"
@@ -60,10 +74,22 @@
         [attr.fill-opacity]="hovered === annotation.id ? 0.3 : 0"
         [attr.data-cy]="'annotation-' + annotation.id + '-shape'"
       />
+      <line
+        *ngIf="isLineAnnotation(annotation)"
+        [attr.x1]="getPositionAtCurrentTime(annotation.shape).x1"
+        [attr.y1]="getPositionAtCurrentTime(annotation.shape).y1"
+        [attr.x2]="getPositionAtCurrentTime(annotation.shape).x2"
+        [attr.y2]="getPositionAtCurrentTime(annotation.shape).y2"
+        [attr.stroke-width]="hovered === annotation.id ? 4 : currentMode.name === 'edit' ? 3 : 2"
+        [attr.stroke-dasharray]="currentMode.name === 'edit' ? 5 : 0"
+        [attr.stroke]="annotation.label?.color"
+        [attr.data-cy]="'annotation-' + annotation.id + '-shape'"
+        stroke-linecap="round"
+      />
     <text
       *ngIf="showLabels && annotation.label?.name?.length"
-      [attr.x]="getPositionAtCurrentTime(annotation.shape).x + 10"
-      [attr.y]="getPositionAtCurrentTime(annotation.shape).y + 20"
+      [attr.x]="getLabelX(annotation)"
+      [attr.y]="getLabelY(annotation)"
       [attr.data-cy]="'annotation-' + annotation.id + '-label'"
       font-family="Verdana, sans-serif" font-size="18" fill="white" font-weight="bold" style="text-shadow: 0px -1px black">{{annotation.label.name}}</text>
   </g>

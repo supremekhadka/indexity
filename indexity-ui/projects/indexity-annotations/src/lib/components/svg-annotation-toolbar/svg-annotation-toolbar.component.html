@@ -11,6 +11,7 @@
 
 <mat-button-toggle-group style="margin-right: 5px;" #toggle="matButtonToggleGroup">
   <mat-button-toggle value="draw" data-cy="drawing-mode-btn" (click)="activateDrawingMode()" matTooltip="Draw" matTooltipPosition="below"><mat-icon>gesture</mat-icon></mat-button-toggle>
+  <mat-button-toggle value="draw-line" data-cy="line-drawing-mode-btn" (click)="activateDrawingMode(LineDrawingMode)" matTooltip="Draw line" matTooltipPosition="below"><mat-icon>show_chart</mat-icon></mat-button-toggle>
   <mat-button-toggle value="create" data-cy="create-annotation-btn" (click)="activateAnnotationCreationMode()" matTooltip="Create" matTooltipPosition="below"><mat-icon>add</mat-icon></mat-button-toggle>
   <mat-button-toggle value="edit" data-cy="edit-mode-btn" (click)="activateEditMode()" [disabled]="!enableEditMode" matTooltip="Edit" matTooltipPosition="below"><mat-icon>edit</mat-icon></mat-button-toggle>
 

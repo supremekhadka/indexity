@@ -14,6 +14,8 @@ import {
   CreationMode,
   DrawingMode,
   EditMode,
+  isDrawingMode,
+  LineDrawingMode,
   Mode,
   NormalMode,
 } from '../../models/mode';
@@ -30,6 +32,8 @@ import { ToolbarShortcuts } from '../../models/toolbar-shortcuts.model';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SvgAnnotationToolbarComponent implements OnChanges {
+  readonly LineDrawingMode = LineDrawingMode;
+
   @Input() mode: Mode;
   @Input() shape: AnnotationShape;
   @Input() tmpSvgAnnotation: Annotation;
@@ -45,6 +49,7 @@ export class SvgAnnotationToolbarComponent implements OnChanges {
 
   @Output() setMode = new EventEmitter<Mode>();
   @Output() setModeFailure = new EventEmitter<Mode>();
+  @Output() setShape = new EventEmitter<AnnotationShape>();
   @Output() setTmpAnnotation = new EventEmitter<Annotation>();
   @Output() updateAnnotation = new EventEmitter<Partial<Annotation>>();
   @Output() createAnnotation = new EventEmitter<Annotation>();
@@ -60,7 +65,7 @@ export class SvgAnnotationToolbarComponent implements OnChanges {
       changes.mode &&
       changes.mode.currentValue !== changes.mode.previousValue
     ) {
-      this.toggle.value = this.mode.name;
+      this.toggle.value = this.mode?.name === NormalMode.name ? null : this.mode.name;
     }
 
     if (this.mode === EditMode && changes.tmpSvgAnnotation) {
@@ -94,10 +99,10 @@ export class SvgAnnotationToolbarComponent implements OnChanges {
   /**
    * Activate the drawing mode so that the user can add new shapes on the video.
    */
-  activateDrawingMode(): void {
-    if (this.mode.name !== DrawingMode.name) {
-      this.toggle.value = DrawingMode.name;
-      this.setMode.emit(DrawingMode);
+  activateDrawingMode(mode: Mode = DrawingMode): void {
+    if (this.mode.name !== mode.name) {
+      this.toggle.value = mode.name;
+      this.setMode.emit(mode);
     }
   }
 
@@ -140,7 +145,7 @@ export class SvgAnnotationToolbarComponent implements OnChanges {
     this.validateButton.nativeElement.blur();
 
     // validate spatial annotation
-    if (this.tmpSvgAnnotation && this.mode === DrawingMode) {
+    if (this.tmpSvgAnnotation && isDrawingMode(this.mode)) {
       const duration = this.videoTime - this.tmpSvgAnnotation.timestamp;
       this.createAnnotation.emit({
         ...this.tmpSvgAnnotation,

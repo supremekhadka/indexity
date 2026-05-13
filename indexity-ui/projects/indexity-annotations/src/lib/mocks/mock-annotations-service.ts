@@ -1,4 +1,5 @@
 import { Annotation } from '../models/annotation.model';
+import { RECTANGLE_ANNOTATION_SHAPE } from '../models/annotation-shape.model';
 
 export const annotations: Array<Annotation> = [
   {
@@ -42,6 +43,7 @@ export const annotations: Array<Annotation> = [
     videoId: 4,
     category: 'svg',
     shape: {
+      type: RECTANGLE_ANNOTATION_SHAPE,
       positions: {
         0: {
           x: 10,
