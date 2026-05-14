@@ -1,24 +1,47 @@
 import { isNull, range, cloneDeep } from 'lodash';
 
 import { AnnotationEntity } from '../../annotations/entities/annotation.entity';
+import {
+  isLineSurgPosition,
+  LineSurgPosition,
+  RectangleSurgPosition,
+  SurgPosition,
+} from '../../annotations/interfaces/surg-shape.interface';
 
 interface TimestampedPositions {
-  [timestamp: string]: Position;
-}
-
-interface Position {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+  [timestamp: string]: SurgPosition;
 }
 
 interface Point {
   timestamp: number;
-  position: Position;
+  position: SurgPosition;
 }
 
 const FRAME_SIZE_IN_PERCENTS = 100;
+const clampToFrame = (value: number): number =>
+  Math.min(FRAME_SIZE_IN_PERCENTS, Math.max(0, value));
+
+const isSamePosition = (p1: SurgPosition, p2: SurgPosition): boolean => {
+  if (isLineSurgPosition(p1) || isLineSurgPosition(p2)) {
+    return (
+      isLineSurgPosition(p1) &&
+      isLineSurgPosition(p2) &&
+      p1.x1 === p2.x1 &&
+      p1.y1 === p2.y1 &&
+      p1.x2 === p2.x2 &&
+      p1.y2 === p2.y2
+    );
+  }
+
+  const rectangle1 = p1 as RectangleSurgPosition;
+  const rectangle2 = p2 as RectangleSurgPosition;
+  return (
+    rectangle1.x === rectangle2.x &&
+    rectangle1.y === rectangle2.y &&
+    rectangle1.width === rectangle2.width &&
+    rectangle1.height === rectangle2.height
+  );
+};
 
 export const rectifyPositions = (
   positions: TimestampedPositions,
@@ -26,10 +49,24 @@ export const rectifyPositions = (
   const result: TimestampedPositions = {};
   let changed = false;
   Object.keys(positions).map(timestamp => {
-    let x = positions[timestamp].x;
-    let y = positions[timestamp].y;
-    let width = positions[timestamp].width;
-    let height = positions[timestamp].height;
+    const position = positions[timestamp];
+
+    if (isLineSurgPosition(position)) {
+      const fixedPosition: LineSurgPosition = {
+        x1: clampToFrame(position.x1),
+        y1: clampToFrame(position.y1),
+        x2: clampToFrame(position.x2),
+        y2: clampToFrame(position.y2),
+      };
+      changed = changed || !isSamePosition(position, fixedPosition);
+      result[timestamp] = fixedPosition;
+      return;
+    }
+
+    let x = position.x;
+    let y = position.y;
+    let width = position.width;
+    let height = position.height;
     if (x < 0) {
       width = width + x;
       x = 0;
@@ -64,16 +101,10 @@ export const rectifyPositions = (
 export const removeDuplicatedPositions = (
   positions: TimestampedPositions,
 ): TimestampedPositions => {
-  let lastPosition: Position = null;
+  let lastPosition: SurgPosition = null;
   const result: TimestampedPositions = {};
   Object.keys(positions).map(timestamp => {
-    if (
-      isNull(lastPosition) ||
-      lastPosition.x !== positions[timestamp].x ||
-      lastPosition.y !== positions[timestamp].y ||
-      lastPosition.width !== positions[timestamp].width ||
-      lastPosition.height !== positions[timestamp].height
-    ) {
+    if (isNull(lastPosition) || !isSamePosition(lastPosition, positions[timestamp])) {
       result[timestamp] = positions[timestamp];
       lastPosition = positions[timestamp];
     }
@@ -93,7 +124,11 @@ const linearInterpolation = (
   return yA + (x - xA) * ((yB - yA) / (xB - xA));
 };
 
-const getPositionsBetween = (p1: Point, p2: Point, ts: number): Position => {
+const getPositionsBetween = (
+  p1: Point,
+  p2: Point,
+  ts: number,
+): SurgPosition | undefined => {
   if (p1.timestamp < ts && ts < p2.timestamp) {
     if (p1.timestamp === ts) {
       return p1.position;
@@ -102,6 +137,43 @@ const getPositionsBetween = (p1: Point, p2: Point, ts: number): Position => {
     } else {
       const pos1 = p1.position;
       const pos2 = p2.position;
+
+      if (isLineSurgPosition(pos1) || isLineSurgPosition(pos2)) {
+        if (!isLineSurgPosition(pos1) || !isLineSurgPosition(pos2)) {
+          return undefined;
+        }
+
+        return {
+          x1: linearInterpolation(
+            p1.timestamp,
+            pos1.x1,
+            p2.timestamp,
+            pos2.x1,
+            ts,
+          ),
+          y1: linearInterpolation(
+            p1.timestamp,
+            pos1.y1,
+            p2.timestamp,
+            pos2.y1,
+            ts,
+          ),
+          x2: linearInterpolation(
+            p1.timestamp,
+            pos1.x2,
+            p2.timestamp,
+            pos2.x2,
+            ts,
+          ),
+          y2: linearInterpolation(
+            p1.timestamp,
+            pos1.y2,
+            p2.timestamp,
+            pos2.y2,
+            ts,
+          ),
+        };
+      }
 
       const x = linearInterpolation(
         p1.timestamp,

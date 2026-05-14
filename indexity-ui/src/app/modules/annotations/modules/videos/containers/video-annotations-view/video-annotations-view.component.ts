@@ -51,6 +51,8 @@ import {
   DrawingMode,
   EditMode,
   CreationMode,
+  isDrawingMode,
+  LineDrawingMode,
 } from '@app/annotations/modules/videos/models/mode';
 import { SvgAnnotationFormDialogComponent } from '@indexity/annotations';
 import { AnnotationShape } from '@app/annotations/models/annotation-shape.model';
@@ -72,15 +74,18 @@ import { ToolbarShortcuts } from '@app/videos/models/toolbar-shortcuts.model';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class VideoAnnotationsViewComponent
-  implements OnInit, OnDestroy, AfterViewInit {
+  implements OnInit, OnDestroy, AfterViewInit
+{
   @ViewChild(MediaPlayerComponent, { static: true })
   mediaPlayer: MediaPlayerComponent;
   @ViewChild(AnnotationsTimelinesComponent, { static: true })
   timelines: AnnotationsTimelinesComponent;
+
   timelineWidth$ = new BehaviorSubject(1);
   timelineCurrentTimeFormat$ = new BehaviorSubject<'standard' | 'seconds'>(
     'standard',
   );
+
   // video
   videoDuration$ = this.videoPlayerStoreFacade.duration$;
 
@@ -122,24 +127,23 @@ export class VideoAnnotationsViewComponent
     }),
   );
 
-  suggestedAnnotationLabelGroup$: Observable<
-    AnnotationLabelGroup
-  > = this.video$.pipe(
-    filter((v) => v && v.groupIds && v.groupIds.length > 0),
-    tap((video) => this.videoGroupsFacade.loadGroup(video.groupIds[0])),
-    switchMap((video) =>
-      this.videoGroupsFacade.getGroupById(video.groupIds[0]),
-    ),
-    filter((videoGroup) => videoGroup && !!videoGroup.annotationLabelGroupId),
-    tap((videoGroup) =>
-      this.labelGroupsFacade.loadOne(videoGroup.annotationLabelGroupId),
-    ),
-    switchMap((videoGroup) =>
-      this.labelGroupsFacade.getGroupById(videoGroup.annotationLabelGroupId),
-    ),
-    filter((lg) => !!lg),
-    tap((lg) => (this.suggestedAnnotationLabelGroup = lg)),
-  );
+  suggestedAnnotationLabelGroup$: Observable<AnnotationLabelGroup> =
+    this.video$.pipe(
+      filter((v) => v && v.groupIds && v.groupIds.length > 0),
+      tap((video) => this.videoGroupsFacade.loadGroup(video.groupIds[0])),
+      switchMap((video) =>
+        this.videoGroupsFacade.getGroupById(video.groupIds[0]),
+      ),
+      filter((videoGroup) => videoGroup && !!videoGroup.annotationLabelGroupId),
+      tap((videoGroup) =>
+        this.labelGroupsFacade.loadOne(videoGroup.annotationLabelGroupId),
+      ),
+      switchMap((videoGroup) =>
+        this.labelGroupsFacade.getGroupById(videoGroup.annotationLabelGroupId),
+      ),
+      filter((lg) => !!lg),
+      tap((lg) => (this.suggestedAnnotationLabelGroup = lg)),
+    );
 
   suggestedAnnotationLabelGroup: AnnotationLabelGroup;
 
@@ -150,11 +154,11 @@ export class VideoAnnotationsViewComponent
   );
   mode: Mode;
   svgOverlay$ = this.svgStoreFacade.overlay$;
-  shape$: Observable<AnnotationShape> = this.svgStoreFacade.shape$.pipe(
-    shareReplay(),
-  );
+  shape$: Observable<AnnotationShape> =
+    this.svgStoreFacade.shape$.pipe(shareReplay());
 
-  trackedAnnotationLabelNames$ = this.structureTrackerFacade.getTrackedAnnotationLabelNames();
+  trackedAnnotationLabelNames$ =
+    this.structureTrackerFacade.getTrackedAnnotationLabelNames();
   trackedAnnotationIds$ = this.structureTrackerFacade.getTrackedAnnotationIds();
 
   // annotations
@@ -170,7 +174,8 @@ export class VideoAnnotationsViewComponent
   );
 
   // annotations with tracker information
-  annotationsWithTrackerInfo$ = this.structureTrackerFacade.getAnnotationsWithTrackerInfo();
+  annotationsWithTrackerInfo$ =
+    this.structureTrackerFacade.getAnnotationsWithTrackerInfo();
   normalizedAnnotationsWithTrackerInfo$ = combineLatest([
     this.annotationsWithTrackerInfo$,
     this.videoPlayerStoreFacade.duration$,
@@ -196,31 +201,27 @@ export class VideoAnnotationsViewComponent
   ]).pipe(
     tap(([currentTime, orderedTimestamps]) => {
       if (orderedTimestamps.length === 0) {
-        // don't move cursor
         this.nextEventTimestamp = currentTime;
       } else {
         const nextTimestamps = orderedTimestamps.filter(
           (ts) => ts > currentTime,
         );
         if (nextTimestamps.length === 0) {
-          // return at the first event in the timelines
           this.nextEventTimestamp = orderedTimestamps[0];
         } else {
-          // go to next event
           this.nextEventTimestamp = nextTimestamps[0];
         }
       }
     }),
   );
 
-  // categoryList$ = this.annotationsStoreFacade.categories$;
-  annotationToUpdate$: Observable<Annotation> = this.annotationsStoreFacade
-    .annotationToUpdate$;
+  annotationToUpdate$: Observable<Annotation> =
+    this.annotationsStoreFacade.annotationToUpdate$;
   annotationToUpdate: Annotation;
-  tmpNewAnnotation$: Observable<
-    Annotation
-  > = this.annotationsStoreFacade.tmpAnnotation$.pipe(shareReplay());
-  labelsWithTrackerInfo$ = this.structureTrackerFacade.getLabelsWithTrackerInfo();
+  tmpNewAnnotation$: Observable<Annotation> =
+    this.annotationsStoreFacade.tmpAnnotation$.pipe(shareReplay());
+  labelsWithTrackerInfo$ =
+    this.structureTrackerFacade.getLabelsWithTrackerInfo();
   labels$ = combineLatest([
     this.labelsWithTrackerInfo$,
     this.tmpNewAnnotation$,
@@ -235,9 +236,7 @@ export class VideoAnnotationsViewComponent
     ),
   );
   searchResults$ = this.annotationLabelsStoreFacade.searchResults$;
-  // descriptions$ = this.normalizedAnnotations$.pipe(
-  //   map(getDescriptions)
-  // );
+
   currentAnnotations$ = combineLatest([
     this.normalizedAnnotations$,
     this.videoTime$,
@@ -269,8 +268,8 @@ export class VideoAnnotationsViewComponent
   selectedAnnotations$ = new BehaviorSubject<number[]>([]);
 
   settings$ = this.settingsStoreFacade.settings$;
-  annotationInterpolationSettings$ = this.settingsStoreFacade
-    .annotationInterpolationSettings$;
+  annotationInterpolationSettings$ =
+    this.settingsStoreFacade.annotationInterpolationSettings$;
   interpolationActive: boolean;
   interpolationStep: number;
 
@@ -282,11 +281,18 @@ export class VideoAnnotationsViewComponent
 
   annotationTrackFn = (i, annotation: Annotation): number => annotation.id;
 
+  /**
+   * FIX #2: Added activateLineDrawingMode shortcut ('KeyL') to match the new
+   * line drawing toolbar button. Previously only rect drawing had a shortcut,
+   * leaving line drawing keyboard-inaccessible and inconsistent.
+   */
   toolbarShortcuts: ToolbarShortcuts = {
     activateEditMode: 'KeyE',
     activateCreationMode: 'KeyC',
     activateDrawingMode: 'KeyD',
+    activateLineDrawingMode: 'KeyL',
   };
+
   lockToolbarShortcuts$ = new BehaviorSubject<boolean>(false);
 
   constructor(
@@ -325,9 +331,10 @@ export class VideoAnnotationsViewComponent
       this.videosStoreFacade.setCurrentVideoId(this.videoId);
       this.structureTrackerFacade.loadVideoStructureTrackers(this.videoId);
     });
-    const timelineSub = this.timelines.timeline.timelineStore.timelineElWidth$.subscribe(
-      this.timelineWidth$,
-    );
+    const timelineSub =
+      this.timelines.timeline.timelineStore.timelineElWidth$.subscribe(
+        this.timelineWidth$,
+      );
     const annotationToUpdateSub = this.annotationToUpdate$.subscribe(
       (annotation) => {
         this.annotationToUpdate = annotation;
@@ -337,16 +344,14 @@ export class VideoAnnotationsViewComponent
       },
     );
     const nextEventTimestampSub = this.nextEventTimestamp$.subscribe();
-    this.subscriptions.push(
-      routeSub,
-      userSub,
-      durationSub,
-      timeSub,
-      timelineSub,
-      annotationToUpdateSub,
-      nextEventTimestampSub,
-    );
-    this.annotationInterpolationSettings$.subscribe(
+
+    /**
+     * FIX #1: annotationInterpolationSettings$ subscription was previously
+     * fire-and-forget — not captured, not pushed to this.subscriptions, causing
+     * a memory leak on component destroy. Now captured and tracked like all
+     * other subscriptions.
+     */
+    const interpolationSub = this.annotationInterpolationSettings$.subscribe(
       ({ activateAnnotationInterpolation, annotationInterpolationStep }) => {
         this.annotationsStoreFacade.loadAnnotations(
           this.videoId,
@@ -356,6 +361,17 @@ export class VideoAnnotationsViewComponent
         this.interpolationActive = activateAnnotationInterpolation;
         this.interpolationStep = annotationInterpolationStep;
       },
+    );
+
+    this.subscriptions.push(
+      routeSub,
+      userSub,
+      durationSub,
+      timeSub,
+      timelineSub,
+      annotationToUpdateSub,
+      nextEventTimestampSub,
+      interpolationSub, // FIX #1: now properly tracked for cleanup
     );
   }
 
@@ -564,7 +580,6 @@ export class VideoAnnotationsViewComponent
 
     dialogRef.afterOpened().subscribe(() => {
       this.onDialogOpen(true);
-
       queryChangesSub = dialogRef.componentInstance.queryChanges$.subscribe(
         (q) => this.onSearchQueryChanges(q),
       );
@@ -609,8 +624,7 @@ export class VideoAnnotationsViewComponent
 
     if (
       annotation &&
-      (this.mode.name === CreationMode.name ||
-        this.mode.name === DrawingMode.name)
+      (this.mode.name === CreationMode.name || isDrawingMode(this.mode))
     ) {
       this.videoPlayerStoreFacade.setCurrentTime(this.currentTimestamp);
     }
@@ -735,7 +749,6 @@ export class VideoAnnotationsViewComponent
         timestamp: Math.round(this.currentTimestamp),
         isOneShot: false,
       };
-
       this.onSetTmpAnnotation(newAnnotation);
     } else {
       this.svgStoreFacade.setMode(NormalMode);

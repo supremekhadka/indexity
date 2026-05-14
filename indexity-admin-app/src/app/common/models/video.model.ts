@@ -8,6 +8,7 @@ export interface Video {
   description?: string;
   url?: string;
   thumbnailUrl?: string;
+  fps?: number;
   userId?: number;
   user?: User;
   videoAnnotationState?: VIDEO_ANNOTATION_STATE;

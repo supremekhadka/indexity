@@ -94,16 +94,15 @@ export class VideosController {
       const restrictedVideoNames = /^0000(3[4-9]|4[0-9]|5[0-8])_VID00.*\.mp4$/;
       const allRestrictedVideoIds: number[] = await this.originalVideosService
         .getMany({ select: ['id', 'name'] })
-        .then(videos =>
+        .then((videos) =>
           videos.filter(({ name }) => name.match(restrictedVideoNames)),
         )
-        .then(videos => videos.map(({ id }) => id));
+        .then((videos) => videos.map(({ id }) => id));
       if (0 < allRestrictedVideoIds.length) {
-        const accessibleVideoIds = await this.videoAccessValidationService.getAccessibleVideoIds(
-          user,
-        );
+        const accessibleVideoIds =
+          await this.videoAccessValidationService.getAccessibleVideoIds(user);
         // videos following the regexp AND accessible to the user
-        const allVideoIds = allRestrictedVideoIds.filter(id =>
+        const allVideoIds = allRestrictedVideoIds.filter((id) =>
           accessibleVideoIds.includes(id),
         );
         const findOptionsWithIdRestriction = merge(options, {
@@ -144,11 +143,17 @@ export class VideosController {
       failedUploadErrors = req.fileValidationErrors;
     }
 
+    const parseFps = (fpsString: string): number => {
+      if (!fpsString) return 30; // Default fallback
+      const [num, den] = fpsString.split('/').map(Number);
+      return den !== 0 ? num / den : num;
+    };
+
     const videos = await Promise.all<Partial<OriginalVideoEntity>>(
       files.map<Promise<Partial<OriginalVideoEntity>>>(
         async (file: any): Promise<Partial<OriginalVideoEntity>> => {
           const filePath = join(file.destination, file.filename);
-          const ffprobeData: FfprobeData = await new Promise(resolve =>
+          const ffprobeData: FfprobeData = await new Promise((resolve) =>
             ffprobe(filePath, async (err, data) => {
               if (err instanceof Error) {
                 this.logger.verbose(
@@ -171,8 +176,9 @@ export class VideosController {
           // TODO
           // - throw Error if there is multiple video streams
           const videoStream: FfprobeStream = ffprobeData.streams.find(
-            stream => 'video' === stream.codec_type,
+            (stream) => 'video' === stream.codec_type,
           );
+          const fps = parseFps(videoStream.avg_frame_rate);
 
           if (!SUPPORTED_VIDEO_CODECS.includes(videoStream.codec_name)) {
             await removeFileIfExists(filePath);
@@ -183,6 +189,7 @@ export class VideosController {
           return {
             name: file.originalname,
             fileName: file.filename,
+            fps: fps,
             url: filePath,
             thumbnailUrl: '',
             user,
@@ -194,7 +201,7 @@ export class VideosController {
       ),
     );
 
-    const videosToUpload = videos.filter(video => video !== null);
+    const videosToUpload = videos.filter((video) => video !== null);
     const createdVideos = this.originalVideosService.createMany(videosToUpload);
 
     if (failedUploadErrors.length > 0) {
@@ -208,13 +215,11 @@ export class VideosController {
 
   @Get('bookmarks-ids')
   async getBookmarksIds(@User() user: UserEntity): Promise<number[]> {
-    const bookmarkVideoIds = await this.originalVideosService.getBookmarks(
-      user,
-    );
-    const accessibleVideoIds = await this.videoAccessValidationService.getAccessibleVideoIds(
-      user,
-    );
-    return bookmarkVideoIds.filter(id => accessibleVideoIds.includes(id));
+    const bookmarkVideoIds =
+      await this.originalVideosService.getBookmarks(user);
+    const accessibleVideoIds =
+      await this.videoAccessValidationService.getAccessibleVideoIds(user);
+    return bookmarkVideoIds.filter((id) => accessibleVideoIds.includes(id));
   }
 
   // Bookmarked videos with pagination
@@ -223,13 +228,11 @@ export class VideosController {
     @User() user: UserEntity,
     @FindMany() options: FindManyOptions<VideoEntity>,
   ): Promise<PaginatedData<VideoEntity>> {
-    const bookmarkVideoIds = await this.originalVideosService.getBookmarks(
-      user,
-    );
-    const accessibleVideoIds = await this.videoAccessValidationService.getAccessibleVideoIds(
-      user,
-    );
-    const accessibleBookMarkVideoIds = bookmarkVideoIds.filter(id =>
+    const bookmarkVideoIds =
+      await this.originalVideosService.getBookmarks(user);
+    const accessibleVideoIds =
+      await this.videoAccessValidationService.getAccessibleVideoIds(user);
+    const accessibleBookMarkVideoIds = bookmarkVideoIds.filter((id) =>
       accessibleVideoIds.includes(id),
     );
     if (0 < accessibleBookMarkVideoIds.length) {
@@ -343,7 +346,7 @@ export class VideosController {
     await this.videoAccessValidationService.validateVideoIdAccess(id, user);
     return this.videosService
       .setAnnotationState(id, user.id, payload.state)
-      .catch(err => {
+      .catch((err) => {
         throw new HttpException(err.message, HttpStatus.BAD_REQUEST);
       });
   }
@@ -495,11 +498,12 @@ export class VideosController {
     if (userIsAdmin(user)) {
       return this.labelsService.getRelatedVideos(label);
     }
-    const accessibleVideoIds = await this.videoAccessValidationService.getAccessibleVideoIds(
-      user,
-    );
+    const accessibleVideoIds =
+      await this.videoAccessValidationService.getAccessibleVideoIds(user);
     const relatedVideos = await this.labelsService.getRelatedVideos(label);
-    return relatedVideos.filter(video => accessibleVideoIds.includes(video.id));
+    return relatedVideos.filter((video) =>
+      accessibleVideoIds.includes(video.id),
+    );
   }
 
   @Get(':id/resolutions')
@@ -540,12 +544,12 @@ export class VideosController {
     // TODO
     // - throw Error if there is multiple video streams
     const videoStream: FfprobeStream = ffprobeData.streams.find(
-      stream => 'video' === stream.codec_type,
+      (stream) => 'video' === stream.codec_type,
     );
 
     const videoLength = parseInt(videoStream.duration) * 1000;
 
-    payload.map(vidChunk => {
+    payload.map((vidChunk) => {
       const allowedTime = videoLength - vidChunk.startTime;
       if (vidChunk.startTime > videoLength || vidChunk.duration > allowedTime) {
         throw new BadRequestException(
@@ -554,7 +558,7 @@ export class VideosController {
       }
     });
     let chunkVideos: VideoChunkEntity[] = [];
-    chunkVideos = payload.map(vidChunk => {
+    chunkVideos = payload.map((vidChunk) => {
       this.chunkService.cutVideo(
         video,
         vidChunk.startTime,

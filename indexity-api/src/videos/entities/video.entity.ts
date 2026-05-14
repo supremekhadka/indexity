@@ -55,6 +55,10 @@ export class VideoEntity extends GenericEntity implements MediaResolution {
   fileName: string;
 
   @ApiProperty()
+  @Column({ default: 22 })
+  fps: number;
+
+  @ApiProperty()
   @Column({
     nullable: true,
   })
@@ -63,11 +67,8 @@ export class VideoEntity extends GenericEntity implements MediaResolution {
   @ApiProperty({
     type: () => UserEntity,
   })
-  @ManyToOne(
-    () => UserEntity,
-    user => user.videos,
-  )
-  @Transform(user => new CleanUserDto(user.id, user.name))
+  @ManyToOne(() => UserEntity, (user) => user.videos)
+  @Transform((user) => new CleanUserDto(user.id, user.name))
   user?: UserEntity;
 
   @ApiProperty()
@@ -78,19 +79,12 @@ export class VideoEntity extends GenericEntity implements MediaResolution {
   @ApiProperty({
     type: () => [AnnotationEntity],
   })
-  @OneToMany(
-    () => AnnotationEntity,
-    annotation => annotation.video,
-  )
+  @OneToMany(() => AnnotationEntity, (annotation) => annotation.video)
   annotations?: AnnotationEntity[];
 
-  @ManyToMany(
-    () => UserEntity,
-    user => user.videoBookmarks,
-    {
-      onDelete: 'CASCADE',
-    },
-  )
+  @ManyToMany(() => UserEntity, (user) => user.videoBookmarks, {
+    onDelete: 'CASCADE',
+  })
   users?: UserEntity[];
 
   @ApiProperty({
@@ -111,10 +105,7 @@ export class VideoEntity extends GenericEntity implements MediaResolution {
   @ApiProperty({
     type: () => [VideoChunkEntity],
   })
-  @OneToMany(
-    () => VideoChunkEntity,
-    videoChunk => videoChunk.video,
-  )
+  @OneToMany(() => VideoChunkEntity, (videoChunk) => videoChunk.video)
   chunkVideo: VideoChunkEntity[];
 
   @ApiProperty({
@@ -126,10 +117,7 @@ export class VideoEntity extends GenericEntity implements MediaResolution {
   @ApiProperty({
     type: () => [VideoGroupEntity],
   })
-  @ManyToMany(
-    () => VideoGroupEntity,
-    group => group.videos,
-  )
+  @ManyToMany(() => VideoGroupEntity, (group) => group.videos)
   @JoinTable({
     name: 'video-group-joins',
     joinColumn: { referencedColumnName: 'id', name: 'videoId' },
@@ -151,13 +139,9 @@ export class VideoEntity extends GenericEntity implements MediaResolution {
   @ApiProperty({
     type: () => VideoEntity,
   })
-  @ManyToOne(
-    () => VideoEntity,
-    video => video.children,
-    {
-      onDelete: 'CASCADE',
-    },
-  )
+  @ManyToOne(() => VideoEntity, (video) => video.children, {
+    onDelete: 'CASCADE',
+  })
   parent: VideoEntity;
 
   @ApiProperty()
@@ -168,10 +152,7 @@ export class VideoEntity extends GenericEntity implements MediaResolution {
   @ApiProperty({
     type: () => [VideoEntity],
   })
-  @OneToMany(
-    () => VideoEntity,
-    video => video.parent,
-  )
+  @OneToMany(() => VideoEntity, (video) => video.parent)
   children: VideoEntity[];
 
   @ApiProperty({
@@ -183,7 +164,7 @@ export class VideoEntity extends GenericEntity implements MediaResolution {
   @Expose()
   get format(): string {
     const standardRes = STANDARD_RESOLUTIONS.find(
-      res => this.width === res.width && this.height === res.height,
+      (res) => this.width === res.width && this.height === res.height,
     );
     return 'object' === typeof standardRes ? standardRes.name : 'custom';
   }

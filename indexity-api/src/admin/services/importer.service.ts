@@ -74,13 +74,14 @@ export class ImporterService {
   }
 
   static updateVideos(videos: any, dir: string): VideoEntity[] {
-    return videos.map(v => {
+    return videos.map((v) => {
       const e = new VideoEntity();
       e.id = v.id;
       e.url = `${dir}/${v.url.split('/').pop()}`;
       e.description = v.description;
       e.name = v.name;
       e.thumbnailUrl = v.thumbnail_url;
+      e.fps = v.fps;
       e.userId = v.userId;
       return e;
     });
@@ -102,7 +103,7 @@ export class ImporterService {
   }
 
   static updateUsers(users: any): UserEntity[] {
-    return users.map(u => {
+    return users.map((u) => {
       const e = new UserEntity();
       e.id = u.id;
       e.name = u.name;
@@ -126,7 +127,7 @@ export class ImporterService {
   }
 
   static updateAnnotations(annotations: any[]): AnnotationEntity[] {
-    return annotations.map(a => {
+    return annotations.map((a) => {
       const e = new AnnotationEntity();
       const color = a.shape.color + '';
       delete a.shape.color;

@@ -1,4 +1,7 @@
-import { AnnotationShape } from '@app/annotations/common/models/annotation-shape.model';
+import {
+  AnnotationShape,
+  RECTANGLE_ANNOTATION_SHAPE,
+} from '@app/annotations/common/models/annotation-shape.model';
 import { createReducer, on } from '@ngrx/store';
 import {
   clear,
@@ -21,6 +24,7 @@ export interface State {
 }
 
 const initialShape: AnnotationShape = {
+  type: RECTANGLE_ANNOTATION_SHAPE,
   positions: {},
 };
 

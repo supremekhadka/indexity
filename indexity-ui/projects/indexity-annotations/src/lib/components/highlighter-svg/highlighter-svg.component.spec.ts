@@ -2,7 +2,7 @@ import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 import { MaterialCustomModule } from '../../modules/material-custom.module';
 import { HighlighterSvgComponent } from './highlighter-svg.component';
 import { annotations } from '../../mocks/mock-annotations-service';
-import { DrawingMode, Mode, NormalMode } from '../../models/mode';
+import { DrawingMode, LineDrawingMode, Mode, NormalMode } from '../../models/mode';
 import { Component } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { Annotation } from '../../models/annotation.model';
@@ -99,10 +99,15 @@ describe('HighlighterSvgComponent', () => {
     );
     directive = directiveEl.injector.get(HighlighterSvgComponent);
     directive.drawnShape = {
+      ...directive.initShape,
       width: 10,
       height: 10,
       posX: 50,
       posY: 50,
+      x1: 50,
+      y1: 50,
+      x2: 60,
+      y2: 60,
       color: '',
       name: '',
     };
@@ -165,7 +170,9 @@ describe('HighlighterSvgComponent', () => {
     it('should call setShape.emit', () => {
       spyOn(directive.setShape, 'emit');
       directive.createAnnotation(shape, label);
-      expect(directive.setShape.emit).toHaveBeenCalledWith(shape);
+      expect(directive.setShape.emit).toHaveBeenCalledWith(
+        jasmine.objectContaining(shape as any),
+      );
     });
 
     it('should call setTmp.emit', () => {
@@ -180,7 +187,10 @@ describe('HighlighterSvgComponent', () => {
       spyOn(directive.setTmp, 'emit');
       directive.createAnnotation(shape, label);
       expect(directive.setTmp.emit).toHaveBeenCalledWith(
-        jasmine.objectContaining(expected),
+        jasmine.objectContaining({
+          ...expected,
+          shape: jasmine.objectContaining(shape as any),
+        }),
       );
     });
 
@@ -192,7 +202,36 @@ describe('HighlighterSvgComponent', () => {
       expect(directive.setTmp.emit).toHaveBeenCalledWith(
         jasmine.objectContaining({
           ...expected,
+          shape: jasmine.objectContaining(shape as any),
           label,
+        }),
+      );
+    });
+
+    it('should preserve line shape types', () => {
+      const lineShape = {
+        type: 'line',
+        positions: {
+          10: {
+            x1: 10,
+            y1: 15,
+            x2: 30,
+            y2: 35,
+          },
+        },
+      };
+      component.mode = LineDrawingMode;
+      component.videoTime = 10;
+      fixture.detectChanges();
+      spyOn(directive.setTmp, 'emit');
+
+      directive.createAnnotation(lineShape as any, label);
+
+      expect(directive.setTmp.emit).toHaveBeenCalledWith(
+        jasmine.objectContaining({
+          shape: jasmine.objectContaining({
+            type: 'line',
+          }),
         }),
       );
     });
@@ -207,10 +246,15 @@ describe('HighlighterSvgComponent', () => {
   describe('move', () => {
     beforeEach(() => {
       directive.drawnShape = {
+        ...directive.initShape,
         width: 10,
         height: 10,
         posX: 50,
         posY: 50,
+        x1: 50,
+        y1: 50,
+        x2: 60,
+        y2: 60,
         color: '',
         name: '',
       };
@@ -240,10 +284,15 @@ describe('HighlighterSvgComponent', () => {
   describe('getCursor', () => {
     beforeEach(() => {
       directive.drawnShape = {
+        ...directive.initShape,
         width: 20,
         height: 20,
         posX: 50,
         posY: 50,
+        x1: 50,
+        y1: 50,
+        x2: 70,
+        y2: 70,
         color: '',
         name: '',
       };
@@ -254,6 +303,20 @@ describe('HighlighterSvgComponent', () => {
       expect(directive.getCursor(null, null)).toBe(NormalMode.cursor);
       expect(directive.getCursor(null, 3)).toBe(NormalMode.cursor);
       expect(directive.getCursor(40, 40)).toBe(NormalMode.cursor);
+    });
+
+    it('should return a line handle cursor for line shapes', () => {
+      directive.drawnShape = {
+        ...directive.drawnShape,
+        type: 'line',
+        x1: 50,
+        y1: 50,
+        x2: 80,
+        y2: 80,
+      };
+
+      expect(directive.getCursor(50, 50)).toBe('line-start');
+      expect(directive.getCursor(80, 80)).toBe('line-end');
     });
 
     it('should return the n-resize cursor', () => {
@@ -296,10 +359,15 @@ describe('HighlighterSvgComponent', () => {
   describe('updateDrawnShape', () => {
     beforeEach(() => {
       directive.drawnShape = {
+        ...directive.initShape,
         width: 20,
         height: 20,
         posX: 50,
         posY: 50,
+        x1: 50,
+        y1: 50,
+        x2: 70,
+        y2: 70,
         color: '',
         name: '',
       };
@@ -357,7 +425,7 @@ describe('HighlighterSvgComponent', () => {
       directive.currentTime = timestamp;
       fixture.detectChanges();
       const rectangle = annotations[4].shape;
-      const positionInRatio = rectangle.positions[timestamp];
+      const positionInRatio: any = rectangle.positions[timestamp];
       const expected = {
         x: getWidthInPixels(positionInRatio.x, directive.svgOverlay.width),
         y: getHeightInPixels(positionInRatio.y, directive.svgOverlay.height),
