@@ -1,6 +1,10 @@
 # dependencies
 /node_modules
 
+#envs
+.env
+!.env.example
+
 # IDE
 .idea
 /.awcache

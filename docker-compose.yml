@@ -47,6 +47,10 @@ services:
       - api
     ports:
       - "8083:80"
+    environment:
+      APICONFIG_BASEURL: ${INDEXITY_UI_API_URL}
+      SOCKETCONFIG_BASEURL: ${INDEXITY_UI_API_URL}
+      JWTSETTINGS_WHITELISTEDDOMAINS: ${INDEXITY_UI_API_HOST}
   tracker-api:
     build:
       context: ./indexity-structure-tracker
